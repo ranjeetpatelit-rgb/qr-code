@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>UPI → QR Converter</title>
+  <style>
+    body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans",sans-serif;margin:0;padding:24px;background:#f7f7fb;color:#111}
+    .card{max-width:680px;margin:30px auto;padding:22px;background:#fff;border-radius:10px;box-shadow:0 6px 20px rgba(16,24,40,0.06)}
+    h1{margin:0 0 8px;font-size:20px}
+    p.sub{margin:0 0 18px;color:#555}
+    label{display:block;margin:10px 0 6px;font-weight:600}
+    input[type="text"]{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:15px}
+    .row{display:flex;gap:12px;margin-top:12px}
+    button{padding:10px 14px;border-radius:9px;border:0;background:#0b5fff;color:white;font-weight:600;cursor:pointer}
+    button.secondary{background:#f3f4f6;color:#111}
+    .preview{margin-top:18px;text-align:center}
+    .hint{font-size:13px;color:#666;margin-top:8px}
+    .error{color:#c53030;margin-top:6px}
+    .small{font-size:13px;color:#666}
+    footer.small{margin-top:18px;color:#666}
+  </style>
+  <!-- QR code library (client-side) -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+</head>
+<body>
+  <div class="card">
+    <h1>UPI → QR Converter</h1>
+    <p class="sub">Apna UPI ID daalo (example: yourid@okbizaxis) — QR banega aur aap PNG download kar sakte ho.</p>
+
+    <label for="upi">UPI ID <span class="small">(required)</span></label>
+    <input id="upi" type="text" placeholder="example: ranjeet123@okbizaxis" autocomplete="off">
+
+    <label for="name">Payee Name <span class="small">(optional, jo naam QR me dikhega)</span></label>
+    <input id="name" type="text" placeholder="Ranjeet Patel (optional)">
+
+    <div class="row">
+      <button id="gen">Generate QR</button>
+      <button id="clear" class="secondary">Clear</button>
+      <a id="downloadLink" style="display:none;margin-left:auto;padding:10px 14px;border-radius:9px;background:#10b981;color:white;text-decoration:none;font-weight:600">Download PNG</a>
+    </div>
+
+    <div class="error" id="err"></div>
+
+    <div class="preview" id="previewArea" style="display:none">
+      <div id="qrcanvas"></div>
+      <div class="hint">Scan this QR with any UPI app to pay.</div>
+      <div class="small" id="upiText" style="margin-top:8px"></div>
+    </div>
+
+    <footer class="small">
+      <strong>Privacy:</strong> Is tool ka code client-side run hota hai — input aapke browser me hi process hota hai (server pe nahi bheja) — jab tak aap ise kisi public host pe host nahi karte. Agar aap host karenge to privacy policy add karein.
+    </footer>
+  </div>
+
+  <script>
+    const upiInput = document.getElementById('upi');
+    const nameInput = document.getElementById('name');
+    const genBtn = document.getElementById('gen');
+    const clearBtn = document.getElementById('clear');
+    const errEl = document.getElementById('err');
+    const preview = document.getElementById('previewArea');
+    const qrcanvas = document.getElementById('qrcanvas');
+    const downloadLink = document.getElementById('downloadLink');
+    const upiText = document.getElementById('upiText');
+
+    // Simple validation regex for UPI VPA (lenient, allows common forms)
+    const vpaRegex = /^[\w.\-]{2,256}@[a-zA-Z0-9]{2,40}$/;
+
+    function makeUpiURI(vpa, name) {
+      // UPI deep link (amount left blank so payer can enter)
+      let uri = `upi://pay?pa=${encodeURIComponent(vpa)}&cu=INR`;
+      if (name && name.trim().length) uri += `&pn=${encodeURIComponent(name.trim())}`;
+      return uri;
+    }
+
+    genBtn.addEventListener('click', async () => {
+      errEl.textContent = '';
+      const vpa = upiInput.value.trim();
+      const pname = nameInput.value.trim();
+
+      if (!vpa) { errEl.textContent = 'UPI ID dalen.'; return; }
+      if (!vpaRegex.test(vpa)) {
+        errEl.textContent = 'UPI ID valid nahi lag raha. Example: ranjeet123@okbizaxis';
+        return;
+      }
+
+      const upiURI = makeUpiURI(vpa, pname);
+
+      // Clear old QR and show loading
+      qrcanvas.innerHTML = '';
+      preview.style.display = 'block';
+      upiText.textContent = `UPI link: ${upiURI}`;
+
+      try {
+        // Generate dataURL (PNG) using QRCode library
+        const dataUrl = await QRCode.toDataURL(upiURI, { width: 400, margin: 1 });
+        // Create image element
+        const img = document.createElement('img');
+        img.src = dataUrl;
+        img.alt = 'UPI QR';
+        img.style.maxWidth = '260px';
+        img.style.height = 'auto';
+        img.style.border = '8px solid #fff';
+        img.style.borderRadius = '12px';
+        img.style.boxShadow = '0 6px 18px rgba(2,6,23,0.08)';
+
+        qrcanvas.appendChild(img);
+
+        // Prepare download link
+        downloadLink.href = dataUrl;
+        // filename friendly
+        const safeName = vpa.replace(/[@\/\\]/g, '_');
+        downloadLink.download = `${safeName}_upi_qr.png`;
+        downloadLink.style.display = 'inline-block';
+        downloadLink.textContent = 'Download PNG';
+      } catch (e) {
+        console.error(e);
+        errEl.textContent = 'QR generate karne me error aaya. Browser ko refresh karke dobara try karein.';
+      }
+    });
+
+    clearBtn.addEventListener('click', () => {
+      upiInput.value = '';
+      nameInput.value = '';
+      qrcanvas.innerHTML = '';
+      errEl.textContent = '';
+      preview.style.display = 'none';
+      downloadLink.style.display = 'none';
+      upiText.textContent = '';
+    });
+
+    // allow enter key generate
+    upiInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') genBtn.click(); });
+    nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') genBtn.click(); });
+  </script>
+</body>
+</html>
